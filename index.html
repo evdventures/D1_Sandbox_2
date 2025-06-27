@@ -82,7 +82,9 @@
     async function loadWorkoutsForClass(className) {
       const rows = await fetchCsv(csvUrls[className]);
       const headers = rows[0].map(h => h.trim());
-      const dayIdx = headers.findIndex(h => h.trim().toLowerCase() === getCurrentDayTime().day.toLowerCase());
+      const dayLower = getCurrentDayTime().day.toLowerCase();
+      // Find the workout column index for today
+      const col = headers.findIndex(h => h.toLowerCase().trim() === dayLower);
       const knownSections = ['warm-up','performance','strength','core & conditioning','cool-down'];
       const sections = [];
       let i = 1;
@@ -95,14 +97,16 @@
           const title = cellA;
           const workouts = [];
           i++;
-          // collect workouts until next section or end
+          // collect workouts until next section header or end
           while (i < rows.length) {
-            const name = (rows[i][0]||'').trim();
-            if (!name) { i++; continue; }
-            const lowerName = name.toLowerCase();
-            if (knownSections.some(s => lowerName === s)) break;
-            const reps = (rows[i][dayIdx]||'').trim();
-            workouts.push({ name, reps });
+            const sectionCheck = (rows[i][0]||'').trim();
+            if (!sectionCheck) { i++; continue; }
+            const lowerCheck = sectionCheck.toLowerCase();
+            if (knownSections.some(s => lowerCheck === s)) break;
+            // Pull name and reps from today's columns
+            const name = (rows[i][col]   || '').trim();
+            const reps = (rows[i][col+1] || '').trim();
+            if (name) workouts.push({ name, reps });
             i++;
           }
           sections.push({ title, workouts });
