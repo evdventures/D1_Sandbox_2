@@ -18,7 +18,6 @@
   <div id="classes"></div>
 
   <script>
-    // Google Sheets CSV export URLs: using specific sheet GIDs
     const SHEET_ID = '1gVwYhr9s0cIFPQQntwfufcHTV7H0kUqtown77cJjjmY';
     const csvUrls = {
       schedule: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`,
@@ -34,17 +33,16 @@
     async function fetchCsv(url) {
       const res = await fetch(url);
       const text = await res.text();
-      return text.split('\n').map(r => r.split(','));
+      return text.trim().split('\n').map(r => r.split(','));
     }
 
     function normalizeTime(t) {
       if (!t) return '';
-      // Handle numeric day fractions from Google Sheets (e.g., 0.6875)
       if (!t.includes(':')) {
         const val = parseFloat(t);
-        const totalMinutes = val * 24 * 60;
-        const h = Math.floor(totalMinutes / 60);
-        const m = Math.round(totalMinutes % 60);
+        const totalMins = val * 24 * 60;
+        const h = Math.floor(totalMins / 60);
+        const m = Math.round(totalMins % 60);
         return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
       }
       const [h, m] = t.split(':');
@@ -53,7 +51,10 @@
 
     function getCurrentDayTime() {
       const now = new Date();
-      return { day: now.toLocaleString('en-US',{ weekday:'long' }), time: now.toTimeString().slice(0,5) };
+      return {
+        day: now.toLocaleString('en-US', { weekday: 'long' }),
+        time: now.toTimeString().slice(0,5)
+      };
     }
 
     function isActive(start, end, now) {
@@ -63,7 +64,12 @@
     async function loadSchedule() {
       if (scheduleData) return scheduleData;
       const rows = await fetchCsv(csvUrls.schedule);
-      scheduleData = rows.slice(1).map(r => ({ name: r[0].trim(), day: r[1].trim(), start: normalizeTime(r[2].trim()), end: normalizeTime(r[3].trim()) }));
+      scheduleData = rows.slice(1).map(r => ({
+        name: r[0].trim(),
+        day: r[1].trim(),
+        start: normalizeTime(r[2].trim()),
+        end: normalizeTime(r[3].trim())
+      }));
       return scheduleData;
     }
 
@@ -76,18 +82,16 @@
       let i = 1;
       while (i < rows.length) {
         const titleRaw = rows[i][0]?.trim();
-        // Detect section header
         const isSection = knownSections.some(s => s.toLowerCase() === titleRaw.toLowerCase());
         if (isSection) {
           const sectionTitle = titleRaw;
           const workouts = [];
           i++;
-          // Collect workouts until next section or end
           while (i < rows.length) {
             const name = rows[i][0]?.trim();
-            const reps = (rows[i][dayIdx] || '').trim();
             const nextIsSection = knownSections.some(s => s.toLowerCase() === name.toLowerCase());
             if (!name || nextIsSection) break;
+            const reps = (rows[i][dayIdx] || '').trim();
             workouts.push({ name, reps });
             i++;
           }
@@ -98,8 +102,6 @@
       }
       return sections;
     }
-      return sections;
-    }
 
     async function updateDisplay() {
       const { day, time } = getCurrentDayTime();
@@ -108,17 +110,17 @@
       const schedule = await loadSchedule();
       const active = schedule.filter(s => s.day === day && isActive(s.start, s.end, time));
       const container = document.getElementById('classes');
-      if (active.length === 0) {
+      if (!active.length) {
         container.innerHTML = '<p>No current classes.</p>';
       } else {
         const cls = active[classIndex % active.length];
         const sections = await loadWorkoutsForClass(cls.name);
         let html = `<div class="class-block"><div class="class-header">${cls.name} (${cls.start} - ${cls.end})</div>`;
-        for (const sec of sections) {
+        sections.forEach(sec => {
           html += `<div class="section"><div class="section-title">${sec.title}</div>`;
-          for (const w of sec.workouts) html += `<div class="workout"><span>${w.name}</span><span>${w.reps}</span></div>`;
+          sec.workouts.forEach(w => { html += `<div class="workout"><span>${w.name}</span><span>${w.reps}</span></div>`; });
           html += '</div>';
-        }
+        });
         html += '</div>';
         container.innerHTML = html;
         classIndex++;
