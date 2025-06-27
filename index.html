@@ -60,10 +60,7 @@
 
     function getCurrentDayTime() {
       const now = new Date();
-      return {
-        day: now.toLocaleString('en-US', { weekday: 'long' }),
-        time: now.toTimeString().slice(0,5)
-      };
+      return { day: now.toLocaleString('en-US', { weekday: 'long' }), time: now.toTimeString().slice(0,5) };
     }
 
     function isActive(start, end, now) {
@@ -85,23 +82,32 @@
     async function loadWorkoutsForClass(className) {
       const rows = await fetchCsv(csvUrls[className]);
       const headers = rows[0].map(h => h.trim());
-      const dayIdx = headers.findIndex(h => h.toLowerCase().includes(getCurrentDayTime().day.toLowerCase()));
+      const dayIdx = headers.findIndex(h => h.trim().toLowerCase() === getCurrentDayTime().day.toLowerCase());
       const knownSections = ['warm-up','performance','strength','core & conditioning','cool-down'];
       const sections = [];
-
-      // iterate rows to detect section headers and pull workouts from that row
-      for (let i = 1; i < rows.length; i++) {
-        const titleRaw = rows[i][0]?.trim();
-        if (!titleRaw) continue;
-        const normTitle = titleRaw.toLowerCase();
-        const isSection = knownSections.some(s => normTitle.includes(s));
-        if (isSection) {
-          const cell = (rows[i][dayIdx] || '').trim();
-          const workouts = cell.split(';').map(item => {
-            const [name, reps] = item.split('|').map(s => s.trim());
-            return { name, reps: reps || '' };
-          }).filter(w => w.name);
-          sections.push({ title: titleRaw, workouts });
+      let i = 1;
+      while (i < rows.length) {
+        const cellA = (rows[i][0]||'').trim();
+        if (!cellA) { i++; continue; }
+        const lowerA = cellA.toLowerCase();
+        // section header
+        if (knownSections.some(s => lowerA === s)) {
+          const title = cellA;
+          const workouts = [];
+          i++;
+          // collect workouts until next section or end
+          while (i < rows.length) {
+            const name = (rows[i][0]||'').trim();
+            if (!name) { i++; continue; }
+            const lowerName = name.toLowerCase();
+            if (knownSections.some(s => lowerName === s)) break;
+            const reps = (rows[i][dayIdx]||'').trim();
+            workouts.push({ name, reps });
+            i++;
+          }
+          sections.push({ title, workouts });
+        } else {
+          i++;
         }
       }
       return sections;
@@ -110,12 +116,10 @@
     async function updateDisplay() {
       const { day, time } = getCurrentDayTime();
       document.getElementById('day-header').textContent = day;
-
       const schedule = await loadSchedule();
       const active = schedule.filter(s => s.day === day && isActive(s.start, s.end, time));
       const container = document.getElementById('classes');
-
-      if (active.length === 0) {
+      if (!active.length) {
         container.innerHTML = '<p>No current classes.</p>';
       } else {
         const cls = active[classIndex % active.length];
@@ -123,7 +127,9 @@
         let html = `<div class="class-block"><div class="class-header">${cls.name} (${cls.start} - ${cls.end})</div>`;
         sections.forEach(sec => {
           html += `<div class="section"><div class="section-title">${sec.title}</div>`;
-          sec.workouts.forEach(w => { html += `<div class="workout"><span>${w.name}</span><span>${w.reps}</span></div>`; });
+          sec.workouts.forEach(w => {
+            html += `<div class="workout"><span>${w.name}</span><span>${w.reps}</span></div>`;
+          });
           html += '</div>';
         });
         html += '</div>';
