@@ -18,7 +18,6 @@
   <div id="classes"></div>
 
   <script>
-    // Google Sheets CSV export URLs: using specific sheet GIDs
     const SHEET_ID = '1gVwYhr9s0cIFPQQntwfufcHTV7H0kUqtown77cJjjmY';
     const csvUrls = {
       schedule: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`,
@@ -39,17 +38,15 @@
 
     function normalizeTime(t) {
       if (!t) return '';
-      // Handle AM/PM strings
-      const ampmMatch = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-      if (ampmMatch) {
-        let h = parseInt(ampmMatch[1], 10);
-        const m = parseInt(ampmMatch[2], 10);
-        const period = ampmMatch[3].toUpperCase();
+      const ampm = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+      if (ampm) {
+        let h = parseInt(ampm[1], 10);
+        const m = parseInt(ampm[2], 10);
+        const period = ampm[3].toUpperCase();
         if (period === 'PM' && h < 12) h += 12;
         if (period === 'AM' && h === 12) h = 0;
         return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
       }
-      // Handle numeric day fractions
       if (!t.includes(':')) {
         const val = parseFloat(t);
         const totalMins = val * 24 * 60;
@@ -63,7 +60,10 @@
 
     function getCurrentDayTime() {
       const now = new Date();
-      return { day: now.toLocaleString('en-US', { weekday: 'long' }), time: now.toTimeString().slice(0,5) };
+      return {
+        day: now.toLocaleString('en-US', { weekday: 'long' }),
+        time: now.toTimeString().slice(0,5)
+      };
     }
 
     function isActive(start, end, now) {
@@ -73,7 +73,12 @@
     async function loadSchedule() {
       if (scheduleData) return scheduleData;
       const rows = await fetchCsv(csvUrls.schedule);
-      scheduleData = rows.slice(1).map(r => ({ name: r[0].trim(), day: r[1].trim(), start: normalizeTime(r[2].trim()), end: normalizeTime(r[3].trim()) }));
+      scheduleData = rows.slice(1).map(r => ({
+        name: r[0].trim(),
+        day: r[1].trim(),
+        start: normalizeTime(r[2].trim()),
+        end: normalizeTime(r[3].trim())
+      }));
       return scheduleData;
     }
 
@@ -84,28 +89,19 @@
       const knownSections = ['warm-up','performance','strength','core & conditioning','cool-down'];
       const sections = [];
 
-      // Each row represents either a section header or empty
+      // iterate rows to detect section headers and pull workouts from that row
       for (let i = 1; i < rows.length; i++) {
         const titleRaw = rows[i][0]?.trim();
         if (!titleRaw) continue;
         const normTitle = titleRaw.toLowerCase();
-        // If this row is a section header
         const isSection = knownSections.some(s => normTitle.includes(s));
         if (isSection) {
-          // Extract workouts from the same row's cell for this day
           const cell = (rows[i][dayIdx] || '').trim();
           const workouts = cell.split(';').map(item => {
             const [name, reps] = item.split('|').map(s => s.trim());
             return { name, reps: reps || '' };
           }).filter(w => w.name);
           sections.push({ title: titleRaw, workouts });
-        }
-      }
-      return sections;
-    }
-          sections.push({ title: sectionTitle, workouts });
-        } else {
-          i++;
         }
       }
       return sections;
@@ -118,7 +114,8 @@
       const schedule = await loadSchedule();
       const active = schedule.filter(s => s.day === day && isActive(s.start, s.end, time));
       const container = document.getElementById('classes');
-      if (!active.length) {
+
+      if (active.length === 0) {
         container.innerHTML = '<p>No current classes.</p>';
       } else {
         const cls = active[classIndex % active.length];
@@ -126,9 +123,7 @@
         let html = `<div class="class-block"><div class="class-header">${cls.name} (${cls.start} - ${cls.end})</div>`;
         sections.forEach(sec => {
           html += `<div class="section"><div class="section-title">${sec.title}</div>`;
-          sec.workouts.forEach(w => {
-            html += `<div class="workout"><span>${w.name}</span><span>${w.reps}</span></div>`;
-          });
+          sec.workouts.forEach(w => { html += `<div class="workout"><span>${w.name}</span><span>${w.reps}</span></div>`; });
           html += '</div>';
         });
         html += '</div>';
