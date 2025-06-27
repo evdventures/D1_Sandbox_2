@@ -83,24 +83,26 @@
       const dayIdx = headers.findIndex(h => h.toLowerCase().includes(getCurrentDayTime().day.toLowerCase()));
       const knownSections = ['warm-up','performance','strength','core & conditioning','cool-down'];
       const sections = [];
-      let i = 1;
-      while (i < rows.length) {
+
+      // Each row represents either a section header or empty
+      for (let i = 1; i < rows.length; i++) {
         const titleRaw = rows[i][0]?.trim();
+        if (!titleRaw) continue;
         const normTitle = titleRaw.toLowerCase();
+        // If this row is a section header
         const isSection = knownSections.some(s => normTitle.includes(s));
         if (isSection) {
-          const sectionTitle = titleRaw;
-          const workouts = [];
-          i++;
-          while (i < rows.length) {
-            const name = rows[i][0]?.trim();
-            const normName = name.toLowerCase();
-            const nextIsSection = knownSections.some(s => normName.includes(s));
-            if (!name || nextIsSection) break;
-            const reps = (rows[i][dayIdx] || '').trim();
-            workouts.push({ name, reps });
-            i++;
-          }
+          // Extract workouts from the same row's cell for this day
+          const cell = (rows[i][dayIdx] || '').trim();
+          const workouts = cell.split(';').map(item => {
+            const [name, reps] = item.split('|').map(s => s.trim());
+            return { name, reps: reps || '' };
+          }).filter(w => w.name);
+          sections.push({ title: titleRaw, workouts });
+        }
+      }
+      return sections;
+    }
           sections.push({ title: sectionTitle, workouts });
         } else {
           i++;
