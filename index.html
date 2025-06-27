@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Workout Display</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: sans-serif; background-color: #111; color: white; padding: 20px; }
+    .class-block { border: 1px solid #333; margin-bottom: 20px; padding: 20px; background-color: #222; border-radius: 8px; }
+    .class-header { font-size: 3em; margin-bottom: 10px; text-align: center; text-transform: uppercase; border-bottom: 1px solid #555; padding-bottom: 10px; }
+    .section { margin-bottom: 48px; }
+    .section-title { font-weight: bold; font-size: 1.8em; color: #fff; border-bottom: 1px solid #555; padding-bottom: 4px; }
+    .workout { font-size: 1.5em; display: flex; justify-content: space-between; padding: 3px 0; }
+  </style>
+</head>
+<body>
+  <h1 id="day-header"></h1>
+  <div id="classes"></div>
+
+  <script>
+    // Google Sheets CSV export URLs: using specific sheet GIDs
+    const SHEET_ID = '1gVwYhr9s0cIFPQQntwfufcHTV7H0kUqtown77cJjjmY';
+    const csvUrls = {
+      schedule: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`,
+      Adult:    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1229641783`,
+      Devo:     `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1138733336`,
+      Rookie:   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=532425350`,
+      Prep:     `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1032796298`
+    };
+
+    let classIndex = 0;
+    let scheduleData = null;
+
+    async function fetchCsv(url) {
+      const res = await fetch(url);
+      const text = await res.text();
+      return text.split('\n').map(r => r.split(','));
+    }
+
+    function normalizeTime(t) {
+      if (!t) return '';
+      const [h, m] = t.split(':');
+      return `${h.padStart(2,'0')}:${(m||'00').padStart(2,'0')}`;
+    }
+
+    function getCurrentDayTime() {
+      const now = new Date();
+      return { day: now.toLocaleString('en-US',{ weekday:'long' }), time: now.toTimeString().slice(0,5) };
+    }
+
+    function isActive(start, end, now) {
+      return start <= now && now <= end;
+    }
+
+    async function loadSchedule() {
+      if (scheduleData) return scheduleData;
+      const rows = await fetchCsv(csvUrls.schedule);
+      scheduleData = rows.slice(1).map(r => ({ name: r[0].trim(), day: r[1].trim(), start: normalizeTime(r[2].trim()), end: normalizeTime(r[3].trim()) }));
+      return scheduleData;
+    }
+
+    async function loadWorkoutsForClass(className) {
+      const rows = await fetchCsv(csvUrls[className]);
+      const headers = rows[0].map(h => h.trim());
+      const dayIdx = headers.findIndex(h => h.toLowerCase() === getCurrentDayTime().day.toLowerCase());
+      const sections = [];
+      for (let i = 1; i < rows.length; i++) {
+        const section = rows[i][0].trim(); if (!section) continue;
+        const cell = rows[i][dayIdx] || '';
+        const workouts = cell.split(';').map(item => {
+          const [name, reps] = item.split('|').map(s => s.trim());
+          return { name, reps: reps || '' };
+        }).filter(w => w.name);
+        sections.push({ title: section, workouts });
+      }
+      return sections;
+    }
+
+    async function updateDisplay() {
+      const { day, time } = getCurrentDayTime();
+      document.getElementById('day-header').textContent = day;
+
+      const schedule = await loadSchedule();
+      const active = schedule.filter(s => s.day === day && isActive(s.start, s.end, time));
+      const container = document.getElementById('classes');
+      if (active.length === 0) {
+        container.innerHTML = '<p>No current classes.</p>';
+      } else {
+        const cls = active[classIndex % active.length];
+        const sections = await loadWorkoutsForClass(cls.name);
+        let html = `<div class="class-block"><div class="class-header">${cls.name} (${cls.start} - ${cls.end})</div>`;
+        for (const sec of sections) {
+          html += `<div class="section"><div class="section-title">${sec.title}</div>`;
+          for (const w of sec.workouts) html += `<div class="workout"><span>${w.name}</span><span>${w.reps}</span></div>`;
+          html += '</div>';
+        }
+        html += '</div>';
+        container.innerHTML = html;
+        classIndex++;
+      }
+    }
+
+    updateDisplay();
+    setInterval(updateDisplay, 15000);
+  </script>
+</body>
+</html>
